@@ -3,7 +3,7 @@ import { LGraph, LGraphNode } from 'litegraph.js';
 export class ShaderGenerator {
   private graph: LGraph;
   private code: string[] = [];
-  private vars: Map<string, string> = new Map(); // key (nodeId_slot) -> varName
+  private vars: Map<string, string> = new Map();
   private usesNoise: boolean = false;
 
   constructor(graph: LGraph) {
@@ -15,12 +15,14 @@ export class ShaderGenerator {
     this.vars.clear();
     this.usesNoise = false;
 
-    // Find Output Node
+    // Find Output Node (support both old and new)
     const nodes = this.graph._nodes || [];
-    const outputNode = nodes.find((n) => n.type === 'shader/output');
+    const outputNode = nodes.find(
+      (n) => n.type === 'shader/output' || n.type === 'shader/output/final'
+    );
 
     if (!outputNode) {
-      return "// No Output Node found. Add a 'Fragment Output' node.";
+      return "// No Output Node found. Add a 'Final Output' node.";
     }
 
     const resultVar = this.processInput(outputNode, 0);
@@ -31,30 +33,7 @@ export class ShaderGenerator {
 `;
 
     if (this.usesNoise) {
-      header += `
-fn hash22(p: vec2<f32>) -> vec2<f32> {
-    var p3 = fract(vec3<f32>(p.xyx) * vec3<f32>(.1031, .1030, .0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.xx+p3.yz)*p3.zy);
-}
-
-fn simplex_noise(p: vec2<f32>) -> f32 {
-    let K1 = 0.366025404; // (sqrt(3)-1)/2;
-    let K2 = 0.211324865; // (3-sqrt(3))/6;
-
-    let i = floor(p + (p.x + p.y) * K1);
-    let a = p - i + (i.x + i.y) * K2;
-    let o = select(vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 0.0), a.x > a.y);
-    let b = a - o + K2;
-    let c = a - 1.0 + 2.0 * K2;
-
-    let h = max(0.5 - vec3<f32>(dot(a,a), dot(b,b), dot(c,c)), vec3<f32>(0.0));
-
-    let n = h*h*h*h * vec3<f32>( dot(a,hash22(i) - 0.5), dot(b,hash22(i + o) - 0.5), dot(c,hash22(i + 1.0) - 0.5));
-
-    return dot(n, vec3<f32>(70.0));
-}
-`;
+      header += this.getNoiseHelpers();
     }
 
     return `${header}
@@ -63,6 +42,35 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
 ${this.code.join('\n')}
     return ${resultVar};
 }`;
+  }
+
+  private getNoiseHelpers(): string {
+    return `
+fn hash22(p: vec2<f32>) -> vec2<f32> {
+    var p3 = fract(vec3<f32>(p.xyx) * vec3<f32>(.1031, .1030, .0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx+p3.yz)*p3.zy);
+}
+
+fn hash21(p: vec2<f32>) -> f32 {
+    var p3 = fract(vec3<f32>(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+fn simplex_noise(p: vec2<f32>) -> f32 {
+    let K1 = 0.366025404;
+    let K2 = 0.211324865;
+    let i = floor(p + (p.x + p.y) * K1);
+    let a = p - i + (i.x + i.y) * K2;
+    let o = select(vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 0.0), a.x > a.y);
+    let b = a - o + K2;
+    let c = a - 1.0 + 2.0 * K2;
+    let h = max(0.5 - vec3<f32>(dot(a,a), dot(b,b), dot(c,c)), vec3<f32>(0.0));
+    let n = h*h*h*h * vec3<f32>(dot(a,hash22(i) - 0.5), dot(b,hash22(i + o) - 0.5), dot(c,hash22(i + 1.0) - 0.5));
+    return dot(n, vec3<f32>(70.0));
+}
+`;
   }
 
   private processInput(node: LGraphNode, slotIndex: number): string {
@@ -83,40 +91,36 @@ ${this.code.join('\n')}
   }
 
   private getInputOrProperty(node: LGraphNode, slot: number): string {
-    // Check if input has a value directly (from serialization)
     const input = node.inputs[slot];
-    // @ts-ignore - litegraph inputs can have values in serialization
+    // @ts-ignore
     if (input.value !== undefined && input.value !== null) {
       // @ts-ignore
       const v = input.value;
-      if (typeof v === 'number') {
-        return this.fmt(v);
-      }
+      if (typeof v === 'number') return this.fmt(v);
     }
 
-    // Check widgets_values (common in litegraph for widget-converted inputs)
     if (node.widgets_values && node.widgets_values[slot] !== undefined) {
       const v = node.widgets_values[slot];
-      if (typeof v === 'number') {
-        return this.fmt(v);
-      }
+      if (typeof v === 'number') return this.fmt(v);
     }
 
-    // Fallback to properties if names match
     const name = input.name.toLowerCase();
     if (node.properties && node.properties[name] !== undefined) {
       const v = node.properties[name];
-      if (typeof v === 'number') {
-        return this.fmt(v);
-      }
+      if (typeof v === 'number') return this.fmt(v);
     }
 
     return this.getDefaultValue(node, slot);
   }
 
-  private fmt(n: number) {
+  private fmt(n: number): string {
     const s = n.toString();
     return s.includes('.') ? s : `${s}.0`;
+  }
+
+  private prop(node: LGraphNode, name: string, def: number): string {
+    const v = node.properties?.[name] ?? def;
+    return this.fmt(v);
   }
 
   private processNode(node: LGraphNode, outputSlot: number): string {
@@ -125,32 +129,407 @@ ${this.code.join('\n')}
       return this.vars.get(key)!;
     }
 
-    let varName = `v${node.id}_${outputSlot}`;
+    const varName = `v${node.id}_${outputSlot}`;
     let expr = '';
 
-    const fmt = this.fmt;
-
     switch (node.type) {
+      // ========== INPUT NODES ==========
       case 'shader/time':
+      case 'shader/input/time':
         expr = 'globals.time';
         break;
+
       case 'shader/uv':
-        expr = 'in.uv';
+      case 'shader/input/screen_position':
+        if (outputSlot === 0) expr = 'in.uv';
+        else if (outputSlot === 1) expr = 'in.uv.x';
+        else if (outputSlot === 2) expr = 'in.uv.y';
         break;
+
+      case 'shader/input/center_offset':
+        if (outputSlot === 0) expr = '(in.uv - vec2<f32>(0.5))';
+        else if (outputSlot === 1) expr = 'length(in.uv - vec2<f32>(0.5))';
+        break;
+
+      case 'shader/input/color':
       case 'shader/color': {
         const c = node.properties.color || [1, 1, 1, 1];
         if (outputSlot === 0)
-          expr = `vec4<f32>(${fmt(c[0])}, ${fmt(c[1])}, ${fmt(c[2])}, ${fmt(c[3])})`;
-        else if (outputSlot === 1) expr = `vec3<f32>(${fmt(c[0])}, ${fmt(c[1])}, ${fmt(c[2])})`;
-        else if (outputSlot === 2) expr = `${fmt(c[3])}`;
+          expr = `vec4<f32>(${this.fmt(c[0])}, ${this.fmt(c[1])}, ${this.fmt(c[2])}, ${this.fmt(c[3])})`;
+        else if (outputSlot === 1)
+          expr = `vec3<f32>(${this.fmt(c[0])}, ${this.fmt(c[1])}, ${this.fmt(c[2])})`;
+        else if (outputSlot === 2) expr = this.fmt(c[3]);
         break;
       }
+
+      case 'shader/input/float': {
+        expr = this.prop(node, 'value', 1.0);
+        break;
+      }
+
+      case 'shader/input/vec2': {
+        const x = this.prop(node, 'x', 0.5);
+        const y = this.prop(node, 'y', 0.5);
+        expr = `vec2<f32>(${x}, ${y})`;
+        break;
+      }
+
+      // ========== SHAPE NODES ==========
+      case 'shader/shape/circle': {
+        const pos = this.processInput(node, 0);
+        const radius = this.processInput(node, 1);
+        const softness = this.processInput(node, 2);
+        const r = this.prop(node, 'radius', 0.3);
+        const s = this.prop(node, 'softness', 0.02);
+        expr = `(1.0 - smoothstep(${radius !== '0.0' ? radius : r} - ${softness !== '0.0' ? softness : s}, ${radius !== '0.0' ? radius : r}, length(${pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv'} - vec2<f32>(0.5))))`;
+        break;
+      }
+
+      case 'shader/shape/ring': {
+        const pos = this.processInput(node, 0);
+        const radius = this.prop(node, 'radius', 0.3);
+        const thickness = this.prop(node, 'thickness', 0.05);
+        const softness = this.prop(node, 'softness', 0.02);
+        const uv = pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv';
+        expr = `(smoothstep(${radius} - ${thickness} - ${softness}, ${radius} - ${thickness}, length(${uv} - vec2<f32>(0.5))) * (1.0 - smoothstep(${radius} - ${softness}, ${radius}, length(${uv} - vec2<f32>(0.5)))))`;
+        break;
+      }
+
+      case 'shader/shape/radial_gradient': {
+        const pos = this.processInput(node, 0);
+        const scale = this.prop(node, 'scale', 1.0);
+        const uv = pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv';
+        expr = `(1.0 - clamp(length(${uv} - vec2<f32>(0.5)) * ${scale} * 2.0, 0.0, 1.0))`;
+        break;
+      }
+
+      case 'shader/shape/starburst': {
+        const pos = this.processInput(node, 0);
+        const rays = this.prop(node, 'rays', 8.0);
+        const sharpness = this.prop(node, 'sharpness', 2.0);
+        const uv = pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv';
+        expr = `pow(abs(cos(atan2((${uv}.y - 0.5), (${uv}.x - 0.5)) * ${rays})), ${sharpness})`;
+        break;
+      }
+
+      case 'shader/shape/box': {
+        const pos = this.processInput(node, 0);
+        const w = this.prop(node, 'width', 0.4);
+        const h = this.prop(node, 'height', 0.3);
+        const softness = this.prop(node, 'softness', 0.02);
+        const uv = pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv';
+        expr = `(smoothstep(0.0, ${softness}, ${uv}.x - (0.5 - ${w}/2.0)) * smoothstep(0.0, ${softness}, (0.5 + ${w}/2.0) - ${uv}.x) * smoothstep(0.0, ${softness}, ${uv}.y - (0.5 - ${h}/2.0)) * smoothstep(0.0, ${softness}, (0.5 + ${h}/2.0) - ${uv}.y))`;
+        break;
+      }
+
+      case 'shader/shape/directional_gradient': {
+        const pos = this.processInput(node, 0);
+        const angle = this.prop(node, 'angle', 0.0);
+        const uv = pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv';
+        expr = `(${uv}.x * cos(${angle}) + ${uv}.y * sin(${angle}))`;
+        break;
+      }
+
+      // ========== ANIMATION NODES ==========
+      case 'shader/animate/animate': {
+        const speed = this.prop(node, 'speed', 1.0);
+        if (outputSlot === 0) expr = `(globals.time * ${speed})`;
+        else if (outputSlot === 1) expr = `fract(globals.time * ${speed})`;
+        break;
+      }
+
+      case 'shader/animate/pulse': {
+        const speed = this.prop(node, 'speed', 2.0);
+        const min = this.prop(node, 'min', 0.5);
+        const max = this.prop(node, 'max', 1.0);
+        expr = `mix(${min}, ${max}, (sin(globals.time * ${speed}) * 0.5 + 0.5))`;
+        break;
+      }
+
+      case 'shader/animate/pingpong': {
+        const speed = this.prop(node, 'speed', 1.0);
+        expr = `abs(fract(globals.time * ${speed}) * 2.0 - 1.0)`;
+        break;
+      }
+
+      case 'shader/animate/expand': {
+        const speed = this.prop(node, 'speed', 0.5);
+        const fadeStart = this.prop(node, 'fadeStart', 0.5);
+        if (outputSlot === 0) expr = `fract(globals.time * ${speed})`;
+        else if (outputSlot === 1)
+          expr = `(1.0 - smoothstep(${fadeStart}, 1.0, fract(globals.time * ${speed})))`;
+        break;
+      }
+
+      case 'shader/animate/wave': {
+        const speed = this.prop(node, 'speed', 2.0);
+        const amplitude = this.prop(node, 'amplitude', 1.0);
+        expr = `(sin(globals.time * ${speed}) * ${amplitude})`;
+        break;
+      }
+
+      case 'shader/animate/flicker': {
+        this.usesNoise = true;
+        const speed = this.prop(node, 'speed', 10.0);
+        const intensity = this.prop(node, 'intensity', 0.3);
+        expr = `(1.0 - ${intensity} + hash21(vec2<f32>(floor(globals.time * ${speed}), 0.0)) * ${intensity})`;
+        break;
+      }
+
+      // ========== COLOR NODES ==========
+      case 'shader/color/gradient': {
+        const factor = this.processInput(node, 0);
+        const colorA = this.processInput(node, 1);
+        const colorB = this.processInput(node, 2);
+        const defA = node.properties.colorA || [1, 0.2, 0];
+        const defB = node.properties.colorB || [1, 1, 0];
+        const a =
+          colorA !== 'vec3<f32>(0.0)'
+            ? colorA
+            : `vec3<f32>(${this.fmt(defA[0])}, ${this.fmt(defA[1])}, ${this.fmt(defA[2])})`;
+        const b =
+          colorB !== 'vec3<f32>(0.0)'
+            ? colorB
+            : `vec3<f32>(${this.fmt(defB[0])}, ${this.fmt(defB[1])}, ${this.fmt(defB[2])})`;
+        expr = `mix(${a}, ${b}, ${factor})`;
+        break;
+      }
+
+      case 'shader/color/glow': {
+        const color = this.processInput(node, 0);
+        const intensity = this.prop(node, 'intensity', 2.0);
+        expr = `(${color} * ${intensity})`;
+        break;
+      }
+
+      case 'shader/color/fire': {
+        const factor = this.processInput(node, 0);
+        expr = `mix(mix(vec3<f32>(0.1, 0.0, 0.0), vec3<f32>(1.0, 0.3, 0.0), clamp(${factor} * 2.0, 0.0, 1.0)), vec3<f32>(1.0, 1.0, 0.3), clamp((${factor} - 0.5) * 2.0, 0.0, 1.0))`;
+        break;
+      }
+
+      case 'shader/color/electric': {
+        const factor = this.processInput(node, 0);
+        expr = `mix(mix(vec3<f32>(0.1, 0.0, 0.3), vec3<f32>(0.3, 0.5, 1.0), clamp(${factor} * 2.0, 0.0, 1.0)), vec3<f32>(1.0, 1.0, 1.0), clamp((${factor} - 0.5) * 2.0, 0.0, 1.0))`;
+        break;
+      }
+
+      case 'shader/color/water': {
+        const factor = this.processInput(node, 0);
+        expr = `mix(mix(vec3<f32>(0.0, 0.1, 0.3), vec3<f32>(0.1, 0.5, 0.7), clamp(${factor} * 2.0, 0.0, 1.0)), vec3<f32>(0.7, 0.9, 1.0), clamp((${factor} - 0.5) * 2.0, 0.0, 1.0))`;
+        break;
+      }
+
+      case 'shader/color/apply_alpha': {
+        const color = this.processInput(node, 0);
+        const alpha = this.processInput(node, 1);
+        expr = `vec4<f32>(${color}, ${alpha})`;
+        break;
+      }
+
+      case 'shader/color/remap': {
+        const value = this.processInput(node, 0);
+        const fromMin = this.prop(node, 'fromMin', 0.0);
+        const fromMax = this.prop(node, 'fromMax', 1.0);
+        const toMin = this.prop(node, 'toMin', 0.0);
+        const toMax = this.prop(node, 'toMax', 1.0);
+        expr = `(${toMin} + (${value} - ${fromMin}) / (${fromMax} - ${fromMin}) * (${toMax} - ${toMin}))`;
+        break;
+      }
+
+      case 'shader/color/invert': {
+        const value = this.processInput(node, 0);
+        expr = `(1.0 - ${value})`;
+        break;
+      }
+
+      case 'shader/color/clamp': {
+        const value = this.processInput(node, 0);
+        const min = this.prop(node, 'min', 0.0);
+        const max = this.prop(node, 'max', 1.0);
+        expr = `clamp(${value}, ${min}, ${max})`;
+        break;
+      }
+
+      case 'shader/color/posterize': {
+        const value = this.processInput(node, 0);
+        const steps = this.prop(node, 'steps', 4.0);
+        expr = `(floor(${value} * ${steps}) / ${steps})`;
+        break;
+      }
+
+      // ========== EFFECT NODES (High-level) ==========
+      case 'shader/effect/explosion': {
+        const pos = this.processInput(node, 0);
+        const color = this.processInput(node, 1);
+        const speed = this.prop(node, 'speed', 0.5);
+        const size = this.prop(node, 'size', 0.4);
+        const thickness = this.prop(node, 'thickness', 0.08);
+        const uv = pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv';
+        const c = color !== 'vec3<f32>(0.0)' ? color : 'vec3<f32>(1.0, 0.4, 0.1)';
+        // Expanding ring with fade
+        this.code.push(`    let exp_t_${node.id} = fract(globals.time * ${speed});`);
+        this.code.push(`    let exp_dist_${node.id} = length(${uv} - vec2<f32>(0.5));`);
+        this.code.push(`    let exp_radius_${node.id} = exp_t_${node.id} * ${size};`);
+        this.code.push(
+          `    let exp_ring_${node.id} = smoothstep(exp_radius_${node.id} - ${thickness}, exp_radius_${node.id}, exp_dist_${node.id}) * (1.0 - smoothstep(exp_radius_${node.id}, exp_radius_${node.id} + ${thickness}, exp_dist_${node.id}));`
+        );
+        this.code.push(`    let exp_fade_${node.id} = 1.0 - exp_t_${node.id};`);
+        expr = `vec4<f32>(${c} * exp_ring_${node.id} * exp_fade_${node.id} * 2.0, exp_ring_${node.id} * exp_fade_${node.id})`;
+        break;
+      }
+
+      case 'shader/effect/bullet_trail': {
+        const pos = this.processInput(node, 0);
+        const color = this.processInput(node, 1);
+        const length = this.prop(node, 'length', 0.3);
+        const width = this.prop(node, 'width', 0.05);
+        const glow = this.prop(node, 'glow', 2.0);
+        const uv = pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv';
+        const c = color !== 'vec3<f32>(0.0)' ? color : 'vec3<f32>(0.3, 1.0, 0.5)';
+        this.code.push(
+          `    let bt_core_${node.id} = smoothstep(${width}, 0.0, abs(${uv}.y - 0.5)) * smoothstep(0.0, ${length}, ${uv}.x) * smoothstep(1.0, 1.0 - ${length}, ${uv}.x);`
+        );
+        expr = `vec4<f32>(${c} * bt_core_${node.id} * ${glow}, bt_core_${node.id})`;
+        break;
+      }
+
+      case 'shader/effect/water_splash': {
+        const pos = this.processInput(node, 0);
+        const color = this.processInput(node, 1);
+        const speed = this.prop(node, 'speed', 1.0);
+        const rings = this.prop(node, 'rings', 3.0);
+        const decay = this.prop(node, 'decay', 0.5);
+        const uv = pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv';
+        const c = color !== 'vec3<f32>(0.0)' ? color : 'vec3<f32>(0.3, 0.6, 1.0)';
+        this.code.push(`    let ws_dist_${node.id} = length(${uv} - vec2<f32>(0.5));`);
+        this.code.push(`    let ws_t_${node.id} = fract(globals.time * ${speed});`);
+        this.code.push(
+          `    let ws_wave_${node.id} = sin((ws_dist_${node.id} - ws_t_${node.id} * 0.5) * ${rings} * 6.283) * 0.5 + 0.5;`
+        );
+        this.code.push(
+          `    let ws_fade_${node.id} = (1.0 - ws_dist_${node.id} * 2.0) * (1.0 - ws_t_${node.id} * ${decay});`
+        );
+        this.code.push(
+          `    let ws_alpha_${node.id} = ws_wave_${node.id} * max(0.0, ws_fade_${node.id});`
+        );
+        expr = `vec4<f32>(${c}, ws_alpha_${node.id})`;
+        break;
+      }
+
+      case 'shader/effect/healing_aura': {
+        const pos = this.processInput(node, 0);
+        const color = this.processInput(node, 1);
+        const pulseSpeed = this.prop(node, 'pulseSpeed', 2.0);
+        const innerGlow = this.prop(node, 'innerGlow', 0.3);
+        const outerGlow = this.prop(node, 'outerGlow', 0.5);
+        const uv = pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv';
+        const c = color !== 'vec3<f32>(0.0)' ? color : 'vec3<f32>(0.2, 1.0, 0.5)';
+        this.code.push(`    let ha_dist_${node.id} = length(${uv} - vec2<f32>(0.5));`);
+        this.code.push(
+          `    let ha_pulse_${node.id} = sin(globals.time * ${pulseSpeed}) * 0.5 + 0.5;`
+        );
+        this.code.push(
+          `    let ha_glow_${node.id} = (1.0 - smoothstep(${innerGlow}, ${outerGlow}, ha_dist_${node.id})) * (0.7 + ha_pulse_${node.id} * 0.3);`
+        );
+        expr = `vec4<f32>(${c} * ha_glow_${node.id}, ha_glow_${node.id})`;
+        break;
+      }
+
+      case 'shader/effect/shield': {
+        const pos = this.processInput(node, 0);
+        const color = this.processInput(node, 1);
+        const radius = this.prop(node, 'radius', 0.4);
+        const edgeWidth = this.prop(node, 'edgeWidth', 0.05);
+        const uv = pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv';
+        const c = color !== 'vec3<f32>(0.0)' ? color : 'vec3<f32>(0.3, 0.7, 1.0)';
+        this.code.push(`    let sh_dist_${node.id} = length(${uv} - vec2<f32>(0.5));`);
+        this.code.push(
+          `    let sh_edge_${node.id} = smoothstep(${radius} - ${edgeWidth}, ${radius}, sh_dist_${node.id}) * (1.0 - smoothstep(${radius}, ${radius} + ${edgeWidth}, sh_dist_${node.id}));`
+        );
+        this.code.push(
+          `    let sh_inner_${node.id} = (1.0 - smoothstep(0.0, ${radius}, sh_dist_${node.id})) * 0.2;`
+        );
+        expr = `vec4<f32>(${c} * (sh_edge_${node.id} * 2.0 + sh_inner_${node.id}), sh_edge_${node.id} + sh_inner_${node.id})`;
+        break;
+      }
+
+      case 'shader/effect/fire': {
+        this.usesNoise = true;
+        const pos = this.processInput(node, 0);
+        const intensity = this.prop(node, 'intensity', 1.0);
+        const speed = this.prop(node, 'speed', 3.0);
+        const height = this.prop(node, 'height', 0.4);
+        const uv = pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv';
+        this.code.push(`    let fi_uv_${node.id} = ${uv} - vec2<f32>(0.5, 0.0);`);
+        this.code.push(
+          `    let fi_noise_${node.id} = simplex_noise(vec2<f32>(fi_uv_${node.id}.x * 5.0, fi_uv_${node.id}.y * 3.0 - globals.time * ${speed}));`
+        );
+        this.code.push(
+          `    let fi_shape_${node.id} = (1.0 - smoothstep(0.0, ${height}, fi_uv_${node.id}.y)) * smoothstep(-0.2, 0.0, fi_uv_${node.id}.y);`
+        );
+        this.code.push(
+          `    let fi_fire_${node.id} = fi_shape_${node.id} * (0.5 + fi_noise_${node.id} * 0.5) * ${intensity};`
+        );
+        this.code.push(
+          `    let fi_color_${node.id} = mix(vec3<f32>(1.0, 0.2, 0.0), vec3<f32>(1.0, 0.8, 0.2), fi_fire_${node.id});`
+        );
+        expr = `vec4<f32>(fi_color_${node.id} * fi_fire_${node.id} * 2.0, fi_fire_${node.id})`;
+        break;
+      }
+
+      case 'shader/effect/electric_spark': {
+        this.usesNoise = true;
+        const pos = this.processInput(node, 0);
+        const color = this.processInput(node, 1);
+        const intensity = this.prop(node, 'intensity', 1.0);
+        const speed = this.prop(node, 'speed', 15.0);
+        const uv = pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv';
+        const c = color !== 'vec3<f32>(0.0)' ? color : 'vec3<f32>(0.5, 0.7, 1.0)';
+        this.code.push(`    let es_dist_${node.id} = length(${uv} - vec2<f32>(0.5));`);
+        this.code.push(
+          `    let es_noise_${node.id} = simplex_noise(vec2<f32>(atan2(${uv}.y - 0.5, ${uv}.x - 0.5) * 3.0, globals.time * ${speed}));`
+        );
+        this.code.push(
+          `    let es_spark_${node.id} = (1.0 - es_dist_${node.id} * 3.0) * (0.5 + es_noise_${node.id} * 0.5) * ${intensity};`
+        );
+        expr = `vec4<f32>(${c} * max(0.0, es_spark_${node.id}) * 2.0, max(0.0, es_spark_${node.id}))`;
+        break;
+      }
+
+      case 'shader/effect/portal': {
+        this.usesNoise = true;
+        const pos = this.processInput(node, 0);
+        const colorA = this.processInput(node, 1);
+        const colorB = this.processInput(node, 2);
+        const speed = this.prop(node, 'speed', 1.0);
+        const twist = this.prop(node, 'twist', 3.0);
+        const radius = this.prop(node, 'radius', 0.3);
+        const uv = pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv';
+        const cA = colorA !== 'vec3<f32>(0.0)' ? colorA : 'vec3<f32>(0.5, 0.0, 1.0)';
+        const cB = colorB !== 'vec3<f32>(0.0)' ? colorB : 'vec3<f32>(0.0, 0.5, 1.0)';
+        this.code.push(`    let po_centered_${node.id} = ${uv} - vec2<f32>(0.5);`);
+        this.code.push(`    let po_dist_${node.id} = length(po_centered_${node.id});`);
+        this.code.push(
+          `    let po_angle_${node.id} = atan2(po_centered_${node.id}.y, po_centered_${node.id}.x) + globals.time * ${speed} + po_dist_${node.id} * ${twist};`
+        );
+        this.code.push(`    let po_swirl_${node.id} = sin(po_angle_${node.id} * 4.0) * 0.5 + 0.5;`);
+        this.code.push(
+          `    let po_mask_${node.id} = (1.0 - smoothstep(${radius} - 0.1, ${radius}, po_dist_${node.id}));`
+        );
+        this.code.push(`    let po_color_${node.id} = mix(${cA}, ${cB}, po_swirl_${node.id});`);
+        expr = `vec4<f32>(po_color_${node.id} * po_mask_${node.id}, po_mask_${node.id})`;
+        break;
+      }
+
+      // ========== LEGACY NODES ==========
       case 'shader/vector/vec2': {
         const x = this.processInput(node, 0);
         const y = this.processInput(node, 1);
         expr = `vec2<f32>(${x}, ${y})`;
         break;
       }
+
       case 'shader/vector/vec3': {
         const x = this.processInput(node, 0);
         const y = this.processInput(node, 1);
@@ -158,6 +537,7 @@ ${this.code.join('\n')}
         expr = `vec3<f32>(${x}, ${y}, ${z})`;
         break;
       }
+
       case 'shader/vector/vec4': {
         const x = this.processInput(node, 0);
         const y = this.processInput(node, 1);
@@ -166,12 +546,14 @@ ${this.code.join('\n')}
         expr = `vec4<f32>(${x}, ${y}, ${z}, ${w})`;
         break;
       }
+
       case 'shader/vector/combine_vec3_float': {
         const rgb = this.processInput(node, 0);
         const a = this.processInput(node, 1);
         expr = `vec4<f32>(${rgb}, ${a})`;
         break;
       }
+
       case 'shader/noise/simplex': {
         this.usesNoise = true;
         const uv = this.processInput(node, 0);
@@ -179,70 +561,58 @@ ${this.code.join('\n')}
         expr = `simplex_noise(${uv} * ${scale})`;
         break;
       }
+
       case 'shader/math/length': {
         const i = this.processInput(node, 0);
         expr = `length(${i})`;
         break;
       }
+
       case 'shader/math/distance': {
         const a = this.processInput(node, 0);
         const b = this.processInput(node, 1);
         expr = `distance(${a}, ${b})`;
         break;
       }
+
       case 'shader/math/sin': {
         const input = this.processInput(node, 0);
         expr = `sin(${input})`;
         break;
       }
-      case 'shader/math/float_add': {
-        const a = this.processInput(node, 0);
-        const b = this.processInput(node, 1);
-        expr = `(${a} + ${b})`;
-        break;
-      }
-      case 'shader/math/float_sub': {
-        const a = this.processInput(node, 0);
-        const b = this.processInput(node, 1);
-        expr = `(${a} - ${b})`;
-        break;
-      }
-      case 'shader/math/float_mul': {
-        const a = this.processInput(node, 0);
-        const b = this.processInput(node, 1);
-        expr = `(${a} * ${b})`;
-        break;
-      }
-      case 'shader/math/float_div': {
-        const a = this.processInput(node, 0);
-        const b = this.processInput(node, 1);
-        expr = `(${a} / ${b})`;
-        break;
-      }
+
+      case 'shader/math/float_add':
       case 'shader/math/add': {
         const a = this.processInput(node, 0);
         const b = this.processInput(node, 1);
         expr = `(${a} + ${b})`;
         break;
       }
+
+      case 'shader/math/float_sub':
       case 'shader/math/sub': {
         const a = this.processInput(node, 0);
         const b = this.processInput(node, 1);
         expr = `(${a} - ${b})`;
         break;
       }
+
+      case 'shader/math/float_mul':
       case 'shader/math/mul': {
         const a = this.processInput(node, 0);
         const b = this.processInput(node, 1);
         expr = `(${a} * ${b})`;
         break;
       }
+
+      case 'shader/math/float_div':
       case 'shader/math/div': {
         const a = this.processInput(node, 0);
         const b = this.processInput(node, 1);
         expr = `(${a} / ${b})`;
         break;
       }
+
       case 'shader/math/mix': {
         const a = this.processInput(node, 0);
         const b = this.processInput(node, 1);
@@ -250,12 +620,14 @@ ${this.code.join('\n')}
         expr = `mix(${a}, ${b}, ${t})`;
         break;
       }
+
       case 'shader/math/step': {
         const e = this.processInput(node, 0);
         const i = this.processInput(node, 1);
         expr = `step(${e}, ${i})`;
         break;
       }
+
       case 'shader/math/smoothstep': {
         const e1 = this.processInput(node, 0);
         const e2 = this.processInput(node, 1);
@@ -263,16 +635,19 @@ ${this.code.join('\n')}
         expr = `smoothstep(${e1}, ${e2}, ${i})`;
         break;
       }
+
       case 'shader/math/fract': {
         const i = this.processInput(node, 0);
         expr = `fract(${i})`;
         break;
       }
+
       case 'shader/math/oneminus': {
         const i = this.processInput(node, 0);
         expr = `(1.0 - ${i})`;
         break;
       }
+
       default:
         expr = 'vec4<f32>(1.0, 0.0, 1.0, 1.0)';
         this.code.push(`    // Unknown node type: ${node.type}`);

@@ -10,6 +10,7 @@ declare module 'litegraph.js' {
 
   export class LGraphNode {
     static title: string;
+    static desc?: string;
     constructor();
     addInput(name: string, type: string | number, extra_info?: any): void;
     addOutput(name: string, type: string | number, extra_info?: any): void;
@@ -23,6 +24,9 @@ declare module 'litegraph.js' {
     id: number;
     type: string;
     pos: number[];
+    size: [number, number];
+    color?: string;
+    bgcolor?: string;
     inputs: { name: string; type: string; link: number | null }[];
     outputs: { name: string; type: string; links: number[] | null }[];
     connect(slot: number, node: LGraphNode, target_slot: number): void;

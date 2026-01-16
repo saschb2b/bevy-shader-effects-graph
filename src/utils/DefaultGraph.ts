@@ -1,238 +1,205 @@
+/**
+ * Simple default graph demonstrating the new artist-friendly nodes
+ * Just 2 nodes: Explosion Effect -> Final Output
+ */
 export const defaultGraph = {
-  last_node_id: 20,
-  last_link_id: 20,
+  last_node_id: 3,
+  last_link_id: 2,
   nodes: [
+    // Explosion Effect Node - does all the work!
     {
       id: 1,
-      type: 'shader/uv',
-      pos: [50, 50],
-      size: { '0': 140, '1': 30 },
+      type: 'shader/effect/explosion',
+      pos: [150, 150],
+      size: [200, 130],
       flags: {},
       order: 0,
       mode: 0,
-      outputs: [{ name: 'UV', type: 'vec2', links: [1] }],
-      properties: {},
+      inputs: [
+        { name: 'Position', type: 'vec2', link: null },
+        { name: 'Color', type: 'vec3', link: null },
+        { name: 'Speed', type: 'float', link: null },
+        { name: 'Size', type: 'float', link: null },
+      ],
+      outputs: [{ name: 'Result', type: 'vec4', links: [1] }],
+      properties: { speed: 0.5, size: 0.4, thickness: 0.08 },
+      widgets_values: [0.5, 0.4, 0.08],
     },
+    // Final Output Node
     {
       id: 2,
-      type: 'shader/vector/vec2',
-      pos: [50, 150],
-      size: { '0': 140, '1': 60 },
+      type: 'shader/output/final',
+      pos: [450, 180],
+      size: [160, 30],
       flags: {},
       order: 1,
       mode: 0,
-      inputs: [
-        { name: 'X', type: 'float', link: null, value: 0.5 },
-        { name: 'Y', type: 'float', link: null, value: 0.5 },
-      ],
-      outputs: [{ name: 'Out', type: 'vec2', links: [2] }],
-      properties: { x: 0.5, y: 0.5 },
-      widgets_values: [0.5, 0.5],
-    },
-    {
-      id: 3,
-      type: 'shader/math/distance',
-      pos: [300, 150],
-      size: { '0': 140, '1': 50 },
-      flags: {},
-      order: 2,
-      mode: 0,
-      inputs: [
-        { name: 'A', type: 'vec3', link: 1 },
-        { name: 'B', type: 'vec3', link: 2 },
-      ],
-      outputs: [{ name: 'Out', type: 'float', links: [3, 4] }],
-      properties: {},
-    },
-    {
-      id: 5,
-      type: 'shader/time',
-      pos: [50, 300],
-      size: { '0': 140, '1': 30 },
-      flags: {},
-      order: 3,
-      mode: 0,
-      outputs: [{ name: 'Time', type: 'float', links: [5] }],
-      properties: {},
-    },
-    {
-      id: 6,
-      type: 'shader/math/float_mul',
-      pos: [250, 300],
-      size: { '0': 140, '1': 50 },
-      flags: {},
-      order: 4,
-      mode: 0,
-      inputs: [
-        { name: 'A', type: 'float', link: 5 },
-        { name: 'B', type: 'float', link: null, value: 0.5 },
-      ],
-      outputs: [{ name: 'Out', type: 'float', links: [6] }],
-      properties: { b: 0.5 },
-      widgets_values: [0.5, 0.5],
-    },
-    {
-      id: 7,
-      type: 'shader/math/fract',
-      pos: [450, 300],
-      size: { '0': 140, '1': 30 },
-      flags: {},
-      order: 5,
-      mode: 0,
-      inputs: [{ name: 'In', type: 'float', link: 6 }],
-      outputs: [{ name: 'Out', type: 'float', links: [7, 8, 17] }],
-      properties: {},
-    },
-    {
-      id: 8,
-      type: 'shader/math/step',
-      pos: [650, 100],
-      size: { '0': 140, '1': 50 },
-      flags: {},
-      order: 6,
-      mode: 0,
-      inputs: [
-        { name: 'Edge', type: 'float', link: 3 },
-        { name: 'In', type: 'float', link: 7 },
-      ],
-      outputs: [{ name: 'Out', type: 'float', links: [11] }],
-      properties: {},
-    },
-    {
-      id: 9,
-      type: 'shader/math/float_sub',
-      pos: [450, 400],
-      size: { '0': 140, '1': 50 },
-      flags: {},
-      order: 7,
-      mode: 0,
-      inputs: [
-        { name: 'A', type: 'float', link: 8 },
-        { name: 'B', type: 'float', link: null, value: 0.1 },
-      ],
-      outputs: [{ name: 'Out', type: 'float', links: [9] }],
-      properties: { b: 0.1 },
-      widgets_values: [0.1, 0.1],
-    },
-    {
-      id: 10,
-      type: 'shader/math/step',
-      pos: [650, 250],
-      size: { '0': 140, '1': 50 },
-      flags: {},
-      order: 8,
-      mode: 0,
-      inputs: [
-        { name: 'Edge', type: 'float', link: 4 },
-        { name: 'In', type: 'float', link: 9 },
-      ],
-      outputs: [{ name: 'Out', type: 'float', links: [12] }],
-      properties: {},
-    },
-    {
-      id: 11,
-      type: 'shader/math/float_sub',
-      pos: [900, 200],
-      size: { '0': 140, '1': 50 },
-      flags: {},
-      order: 9,
-      mode: 0,
-      inputs: [
-        { name: 'A', type: 'float', link: 11 },
-        { name: 'B', type: 'float', link: 12 },
-      ],
-      outputs: [{ name: 'Out', type: 'float', links: [14] }],
-      properties: {},
-    },
-    {
-      id: 18,
-      type: 'shader/math/oneminus',
-      pos: [650, 450],
-      size: { '0': 140, '1': 30 },
-      flags: {},
-      order: 10,
-      mode: 0,
-      inputs: [{ name: 'In', type: 'float', link: 17 }],
-      outputs: [{ name: 'Out', type: 'float', links: [13] }],
-      properties: {},
-    },
-    {
-      id: 12,
-      type: 'shader/color',
-      pos: [900, 100],
-      size: { '0': 140, '1': 80 },
-      flags: {},
-      order: 11,
-      mode: 0,
-      outputs: [
-        { name: 'Color', type: 'vec4', links: [] },
-        { name: 'RGB', type: 'vec3', links: [15] },
-        { name: 'Alpha', type: 'float', links: [] },
-      ],
-      properties: { color: [1, 0.4, 0.1, 1] },
-      widgets_values: [[1, 0.4, 0.1, 1]],
-    },
-    {
-      id: 19,
-      type: 'shader/math/float_mul',
-      pos: [1100, 300],
-      size: { '0': 140, '1': 50 },
-      flags: {},
-      order: 12,
-      mode: 0,
-      inputs: [
-        { name: 'A', type: 'float', link: 14 },
-        { name: 'B', type: 'float', link: 13 },
-      ],
-      outputs: [{ name: 'Out', type: 'float', links: [18] }],
-      properties: {},
-    },
-    {
-      id: 13,
-      type: 'shader/vector/combine_vec3_float',
-      pos: [1300, 200],
-      size: { '0': 140, '1': 80 },
-      flags: {},
-      order: 13,
-      mode: 0,
-      inputs: [
-        { name: 'RGB', type: 'vec3', link: 15 },
-        { name: 'A', type: 'float', link: 18 },
-      ],
-      outputs: [{ name: 'Out', type: 'vec4', links: [16] }],
-      properties: {},
-    },
-    {
-      id: 16,
-      type: 'shader/output',
-      pos: [1550, 200],
-      size: { '0': 140, '1': 30 },
-      flags: {},
-      order: 14,
-      mode: 0,
-      inputs: [{ name: 'Color', type: 'vec4', link: 16 }],
+      inputs: [{ name: 'Color', type: 'vec4', link: 1 }],
       properties: {},
     },
   ],
   links: [
-    [1, 1, 0, 3, 0, 'vec2'],
-    [2, 2, 0, 3, 1, 'vec2'],
-    [3, 3, 0, 8, 0, 'float'], // Dist -> Step1 Edge
-    [4, 3, 0, 10, 0, 'float'], // Dist -> Step2 Edge
-    [5, 5, 0, 6, 0, 'float'], // Time -> Mul A
-    [6, 6, 0, 7, 0, 'float'], // Mul -> Fract In
-    [7, 7, 0, 8, 1, 'float'], // t -> Step1 In (Outer)
-    [8, 7, 0, 9, 0, 'float'], // t -> Sub A
-    [9, 9, 0, 10, 1, 'float'], // t-0.1 -> Step2 In (Inner)
-    [11, 8, 0, 11, 0, 'float'], // Step1 Out -> Sub A
-    [12, 10, 0, 11, 1, 'float'], // Step2 Out -> Sub B
-    [13, 18, 0, 19, 1, 'float'], // OneMinus Out -> Mul B
-    [14, 11, 0, 19, 0, 'float'], // Ring -> Mul A
-    [15, 12, 1, 13, 0, 'vec3'], // Color RGB -> Combine RGB
-    [16, 13, 0, 16, 0, 'vec4'], // Combine Out -> Output
-    [17, 7, 0, 18, 0, 'float'], // t -> OneMinus In
-    [18, 19, 0, 13, 1, 'float'], // Final Alpha -> Combine A
+    [1, 1, 0, 2, 0, 'vec4'], // Explosion Result -> Output Color
   ],
+  groups: [],
+  config: {},
+  extra: {},
+  version: 0.5,
+};
+
+/**
+ * Alternative example graphs for different effects
+ */
+
+// Water splash - also just 2 nodes!
+export const waterSplashGraph = {
+  last_node_id: 2,
+  last_link_id: 1,
+  nodes: [
+    {
+      id: 1,
+      type: 'shader/effect/water_splash',
+      pos: [150, 150],
+      size: [200, 110],
+      flags: {},
+      order: 0,
+      mode: 0,
+      inputs: [
+        { name: 'Position', type: 'vec2', link: null },
+        { name: 'Color', type: 'vec3', link: null },
+        { name: 'Speed', type: 'float', link: null },
+      ],
+      outputs: [{ name: 'Result', type: 'vec4', links: [1] }],
+      properties: { speed: 1.0, rings: 3, decay: 0.5 },
+    },
+    {
+      id: 2,
+      type: 'shader/output/final',
+      pos: [450, 180],
+      size: [160, 30],
+      flags: {},
+      order: 1,
+      mode: 0,
+      inputs: [{ name: 'Color', type: 'vec4', link: 1 }],
+      properties: {},
+    },
+  ],
+  links: [[1, 1, 0, 2, 0, 'vec4']],
+  groups: [],
+  config: {},
+  extra: {},
+  version: 0.5,
+};
+
+// Healing aura - 2 nodes
+export const healingAuraGraph = {
+  last_node_id: 2,
+  last_link_id: 1,
+  nodes: [
+    {
+      id: 1,
+      type: 'shader/effect/healing_aura',
+      pos: [150, 150],
+      size: [200, 110],
+      flags: {},
+      order: 0,
+      mode: 0,
+      inputs: [
+        { name: 'Position', type: 'vec2', link: null },
+        { name: 'Color', type: 'vec3', link: null },
+      ],
+      outputs: [{ name: 'Result', type: 'vec4', links: [1] }],
+      properties: { pulseSpeed: 2.0, innerGlow: 0.3, outerGlow: 0.5 },
+    },
+    {
+      id: 2,
+      type: 'shader/output/final',
+      pos: [450, 180],
+      size: [160, 30],
+      flags: {},
+      order: 1,
+      mode: 0,
+      inputs: [{ name: 'Color', type: 'vec4', link: 1 }],
+      properties: {},
+    },
+  ],
+  links: [[1, 1, 0, 2, 0, 'vec4']],
+  groups: [],
+  config: {},
+  extra: {},
+  version: 0.5,
+};
+
+// Fire effect - 2 nodes
+export const fireGraph = {
+  last_node_id: 2,
+  last_link_id: 1,
+  nodes: [
+    {
+      id: 1,
+      type: 'shader/effect/fire',
+      pos: [150, 150],
+      size: [200, 110],
+      flags: {},
+      order: 0,
+      mode: 0,
+      inputs: [{ name: 'Position', type: 'vec2', link: null }],
+      outputs: [{ name: 'Result', type: 'vec4', links: [1] }],
+      properties: { intensity: 1.0, speed: 3.0, height: 0.4 },
+    },
+    {
+      id: 2,
+      type: 'shader/output/final',
+      pos: [450, 180],
+      size: [160, 30],
+      flags: {},
+      order: 1,
+      mode: 0,
+      inputs: [{ name: 'Color', type: 'vec4', link: 1 }],
+      properties: {},
+    },
+  ],
+  links: [[1, 1, 0, 2, 0, 'vec4']],
+  groups: [],
+  config: {},
+  extra: {},
+  version: 0.5,
+};
+
+// Portal effect - 2 nodes
+export const portalGraph = {
+  last_node_id: 2,
+  last_link_id: 1,
+  nodes: [
+    {
+      id: 1,
+      type: 'shader/effect/portal',
+      pos: [150, 150],
+      size: [200, 110],
+      flags: {},
+      order: 0,
+      mode: 0,
+      inputs: [
+        { name: 'Position', type: 'vec2', link: null },
+        { name: 'Color A', type: 'vec3', link: null },
+        { name: 'Color B', type: 'vec3', link: null },
+      ],
+      outputs: [{ name: 'Result', type: 'vec4', links: [1] }],
+      properties: { speed: 1.0, twist: 3.0, radius: 0.3 },
+    },
+    {
+      id: 2,
+      type: 'shader/output/final',
+      pos: [450, 180],
+      size: [160, 30],
+      flags: {},
+      order: 1,
+      mode: 0,
+      inputs: [{ name: 'Color', type: 'vec4', link: 1 }],
+      properties: {},
+    },
+  ],
+  links: [[1, 1, 0, 2, 0, 'vec4']],
   groups: [],
   config: {},
   extra: {},
