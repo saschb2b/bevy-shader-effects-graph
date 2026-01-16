@@ -1,11 +1,25 @@
 import { describe, it, expect } from 'vitest';
 import { ShaderGenerator } from './ShaderGenerator';
+import type { LGraph, LLink, LGraphNode } from 'litegraph.js';
+
+interface MockNode extends Partial<LGraphNode> {
+  id: number;
+  type: string;
+  inputs?: { name: string; type: string; link: number | null }[];
+  outputs?: { name: string; type: string; links: number[] | null }[];
+  properties?: Record<string, unknown>;
+  widgets_values?: unknown[];
+  pos?: number[];
+  size?: [number, number];
+}
+
+type LinkTuple = [number, number, number, number, number, string];
 
 /**
  * Mock LGraph for testing ShaderGenerator without litegraph.js dependency
  */
-function createMockGraph(nodes: any[], links: any[]) {
-  const linkMap: Record<number, any> = {};
+function createMockGraph(nodes: MockNode[], links: LinkTuple[]): LGraph {
+  const linkMap: Record<number, LLink> = {};
   links.forEach((link) => {
     linkMap[link[0]] = {
       id: link[0],
@@ -21,7 +35,7 @@ function createMockGraph(nodes: any[], links: any[]) {
     _nodes: nodes,
     links: linkMap,
     getNodeById: (id: number) => nodes.find((n) => n.id === id),
-  } as any;
+  } as unknown as LGraph;
 }
 
 describe('ShaderGenerator', () => {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-function-type */
 declare module 'litegraph.js' {
   export interface LLink {
     id: number;

@@ -54,8 +54,9 @@ export class WebGPURenderer {
         this.pendingShaderCode = null;
         await this.updateShader(code);
       }
-    } catch (e: any) {
-      this.onError(e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      this.onError(message);
       this.onStatusChange('Failed');
       throw e;
     }
@@ -140,9 +141,10 @@ export class WebGPURenderer {
 
       this.onError(null);
       console.log('Shader updated successfully. Pipeline and BindGroup created.');
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Shader update exception:', e);
-      this.onError(e.message);
+      const message = e instanceof Error ? e.message : String(e);
+      this.onError(message);
     }
   }
 

@@ -92,9 +92,9 @@ fn simplex_noise(p: vec2<f32>) -> f32 {
 
   private getInputOrProperty(node: LGraphNode, slot: number): string {
     const input = node.inputs[slot];
-    // @ts-ignore
+    // @ts-expect-error - litegraph input may have a value property at runtime
     if (input.value !== undefined && input.value !== null) {
-      // @ts-ignore
+      // @ts-expect-error - accessing dynamic value property
       const v = input.value;
       if (typeof v === 'number') return this.fmt(v);
     }
