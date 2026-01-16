@@ -375,25 +375,22 @@ fn simplex_noise(p: vec2<f32>) -> f32 {
           `    let exp_ring_${node.id} = smoothstep(exp_radius_${node.id} - ${thickness}, exp_radius_${node.id}, exp_dist_${node.id}) * (1.0 - smoothstep(exp_radius_${node.id}, exp_radius_${node.id} + ${thickness}, exp_dist_${node.id}));`
         );
         this.code.push(`    let exp_fade_${node.id} = 1.0 - exp_t_${node.id};`);
-        this.code.push(`    let exp_alpha_${node.id} = exp_ring_${node.id} * exp_fade_${node.id};`);
-        this.code.push(`    let exp_rgb_${node.id} = ${c} * exp_alpha_${node.id} * 2.0;`);
-        expr = `vec4<f32>(exp_rgb_${node.id}.x, exp_rgb_${node.id}.y, exp_rgb_${node.id}.z, exp_alpha_${node.id})`;
+        expr = `vec4<f32>(${c} * exp_ring_${node.id} * exp_fade_${node.id} * 2.0, exp_ring_${node.id} * exp_fade_${node.id})`;
         break;
       }
 
       case 'shader/effect/bullet_trail': {
         const pos = this.processInput(node, 0);
         const color = this.processInput(node, 1);
-        const len = this.prop(node, 'length', 0.3);
+        const length = this.prop(node, 'length', 0.3);
         const width = this.prop(node, 'width', 0.05);
         const glow = this.prop(node, 'glow', 2.0);
         const uv = pos !== 'vec2<f32>(0.0)' ? pos : 'in.uv';
         const c = color !== 'vec3<f32>(0.0)' ? color : 'vec3<f32>(0.3, 1.0, 0.5)';
         this.code.push(
-          `    let bt_core_${node.id} = smoothstep(${width}, 0.0, abs(${uv}.y - 0.5)) * smoothstep(0.0, ${len}, ${uv}.x) * smoothstep(1.0, 1.0 - ${len}, ${uv}.x);`
+          `    let bt_core_${node.id} = smoothstep(${width}, 0.0, abs(${uv}.y - 0.5)) * smoothstep(0.0, ${length}, ${uv}.x) * smoothstep(1.0, 1.0 - ${length}, ${uv}.x);`
         );
-        this.code.push(`    let bt_rgb_${node.id} = ${c} * bt_core_${node.id} * ${glow};`);
-        expr = `vec4<f32>(bt_rgb_${node.id}.x, bt_rgb_${node.id}.y, bt_rgb_${node.id}.z, bt_core_${node.id})`;
+        expr = `vec4<f32>(${c} * bt_core_${node.id} * ${glow}, bt_core_${node.id})`;
         break;
       }
 
@@ -416,8 +413,7 @@ fn simplex_noise(p: vec2<f32>) -> f32 {
         this.code.push(
           `    let ws_alpha_${node.id} = ws_wave_${node.id} * max(0.0, ws_fade_${node.id});`
         );
-        this.code.push(`    let ws_rgb_${node.id} = ${c};`);
-        expr = `vec4<f32>(ws_rgb_${node.id}.x, ws_rgb_${node.id}.y, ws_rgb_${node.id}.z, ws_alpha_${node.id})`;
+        expr = `vec4<f32>(${c}, ws_alpha_${node.id})`;
         break;
       }
 
@@ -436,8 +432,7 @@ fn simplex_noise(p: vec2<f32>) -> f32 {
         this.code.push(
           `    let ha_glow_${node.id} = (1.0 - smoothstep(${innerGlow}, ${outerGlow}, ha_dist_${node.id})) * (0.7 + ha_pulse_${node.id} * 0.3);`
         );
-        this.code.push(`    let ha_rgb_${node.id} = ${c} * ha_glow_${node.id};`);
-        expr = `vec4<f32>(ha_rgb_${node.id}.x, ha_rgb_${node.id}.y, ha_rgb_${node.id}.z, ha_glow_${node.id})`;
+        expr = `vec4<f32>(${c} * ha_glow_${node.id}, ha_glow_${node.id})`;
         break;
       }
 
@@ -455,11 +450,7 @@ fn simplex_noise(p: vec2<f32>) -> f32 {
         this.code.push(
           `    let sh_inner_${node.id} = (1.0 - smoothstep(0.0, ${radius}, sh_dist_${node.id})) * 0.2;`
         );
-        this.code.push(`    let sh_alpha_${node.id} = sh_edge_${node.id} + sh_inner_${node.id};`);
-        this.code.push(
-          `    let sh_rgb_${node.id} = ${c} * (sh_edge_${node.id} * 2.0 + sh_inner_${node.id});`
-        );
-        expr = `vec4<f32>(sh_rgb_${node.id}.x, sh_rgb_${node.id}.y, sh_rgb_${node.id}.z, sh_alpha_${node.id})`;
+        expr = `vec4<f32>(${c} * (sh_edge_${node.id} * 2.0 + sh_inner_${node.id}), sh_edge_${node.id} + sh_inner_${node.id})`;
         break;
       }
 
@@ -483,10 +474,7 @@ fn simplex_noise(p: vec2<f32>) -> f32 {
         this.code.push(
           `    let fi_color_${node.id} = mix(vec3<f32>(1.0, 0.2, 0.0), vec3<f32>(1.0, 0.8, 0.2), fi_fire_${node.id});`
         );
-        this.code.push(
-          `    let fi_rgb_${node.id} = fi_color_${node.id} * fi_fire_${node.id} * 2.0;`
-        );
-        expr = `vec4<f32>(fi_rgb_${node.id}.x, fi_rgb_${node.id}.y, fi_rgb_${node.id}.z, fi_fire_${node.id})`;
+        expr = `vec4<f32>(fi_color_${node.id} * fi_fire_${node.id} * 2.0, fi_fire_${node.id})`;
         break;
       }
 
@@ -505,13 +493,12 @@ fn simplex_noise(p: vec2<f32>) -> f32 {
         this.code.push(
           `    let es_spark_${node.id} = (1.0 - es_dist_${node.id} * 3.0) * (0.5 + es_noise_${node.id} * 0.5) * ${intensity};`
         );
-        this.code.push(`    let es_alpha_${node.id} = max(0.0, es_spark_${node.id});`);
-        this.code.push(`    let es_rgb_${node.id} = ${c} * es_alpha_${node.id} * 2.0;`);
-        expr = `vec4<f32>(es_rgb_${node.id}.x, es_rgb_${node.id}.y, es_rgb_${node.id}.z, es_alpha_${node.id})`;
+        expr = `vec4<f32>(${c} * max(0.0, es_spark_${node.id}) * 2.0, max(0.0, es_spark_${node.id}))`;
         break;
       }
 
       case 'shader/effect/portal': {
+        this.usesNoise = true;
         const pos = this.processInput(node, 0);
         const colorA = this.processInput(node, 1);
         const colorB = this.processInput(node, 2);
@@ -531,8 +518,7 @@ fn simplex_noise(p: vec2<f32>) -> f32 {
           `    let po_mask_${node.id} = (1.0 - smoothstep(${radius} - 0.1, ${radius}, po_dist_${node.id}));`
         );
         this.code.push(`    let po_color_${node.id} = mix(${cA}, ${cB}, po_swirl_${node.id});`);
-        this.code.push(`    let po_rgb_${node.id} = po_color_${node.id} * po_mask_${node.id};`);
-        expr = `vec4<f32>(po_rgb_${node.id}.x, po_rgb_${node.id}.y, po_rgb_${node.id}.z, po_mask_${node.id})`;
+        expr = `vec4<f32>(po_color_${node.id} * po_mask_${node.id}, po_mask_${node.id})`;
         break;
       }
 
